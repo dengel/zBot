@@ -1,0 +1,62 @@
+2.18
+--
+Just a repack for redistribution. No code changes.
+Removed MIGRATE and UPGRADE docs, not needed anymore.
+
+2.17
+--
+When calling modules, 3 new environment variables are setup for
+the module to use: ZBOT_CHAN, ZBOT_NICK, and ZBOT_PERM
+
+2.16
+--
+Added parameter to !url <nick>
+
+2.15
+--
+Implemented a basic URL catcher. It stores all urls on new table "urls":
+
+CREATE TABLE `urls` (
+`u_id` INT NOT NULL AUTO_INCREMENT ,
+`nick` VARCHAR( 255 ) NOT NULL ,
+`channel` VARCHAR( 255 ) NOT NULL ,
+`url` VARCHAR( 255 ) NOT NULL ,
+PRIMARY KEY ( `u_id` ) 
+) TYPE=MyISAM;
+
+2.14
+--
+Implemented "!link term1 term2". Needs new field on *existing* channel tables,
+alter your tables for every existing channel with:
+
+ALTER TABLE `canal_xbot` ADD `link` INT;
+
+New config directive:
+
+perm_link  => 10,
+
+2.13
+--
+Better module handling by enclosing params in quotes.
+
+2.12
+--
+Packed spaces properly, multiple spaces become one.
+
+2.11
+--
+Implemented "!rand param", using one less query.
+
+External "modules" can return "? term param param" and 
+have the result sent back to chan.
+2.10
+--
+Fixed "!flearn ?" bug.
+
+2.9
+--
+Fixed "!flearn +" and "#!flearn *" bug.
+
+2.8
+---
+Fixed "?? \" bug.

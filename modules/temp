@@ -1,0 +1,120 @@
+#!/bin/bash
+temp_fun () {
+/usr/bin/wget http://weather.noaa.gov/pub/data/observations/metar/decoded/$LOC.TXT -q -c -O /tmp/temp.$LOC
+LUGAR=`cat "/tmp/temp.$LOC"|head -1|awk '{print $1$2$3 }'`
+TEMP=`cat "/tmp/temp.$LOC" |egrep "Temperature"|awk -F\( '{print $2}'|awk '{print $1}'`
+HUMEDAD=`cat "/tmp/temp.$LOC" |egrep "Relative"|sed -e 's/Relative\ Humidity\:\ /Humedad /g'`
+FECHA=`cat /tmp/temp.$LOC |head -2|tail -1|awk '{print $1" " $2" "$3}'`
+echo "$TEMP" Grados - "$HUMEDAD" - "$FECHA" "Estacion $LUGAR"
+rm -rf /tmp/temp.$LOC
+}
+
+temp_vak ()  {
+/usr/bin/wget http://www.meteochile.cl/data/tablameteo.txt -q -c -O /tmp/vak.temp
+cat /tmp/vak.temp|grep $LOC|awk -F";" '{print $2": Condicion Actual: "$5" Grados," $3 " -- Pronostico Para: " $11 " es " $10 " Grados "$8}'
+rm -rf /tmp/vak.temp
+}
+                                                                                                                            
+case "$1" in
+  dengel)
+  LOC=KRDU
+  temp_fun
+     ;;
+  pollo)
+  LOC=KSFO
+  temp_fun
+     ;;
+     help)
+     echo "DISPONIBLE: SANTIAGO,ARICA,IQUIQUE,CALAMA,ANTOFAGASTA,COPIAPO,SERENA,VIÑA,CURICO,CHILLAN,CONCEPCION,ANGELES,TEMUCO,VALDIVIA,OSORNO,PTMONTT,CHAITEN,COIHAIQUE,BALMACEDA"
+     ;;
+SANTIAGO)
+LOC=SCQN
+temp_vak
+;;
+ARICA|arica)
+LOC=SCAR
+temp_vak
+;;
+IQUIQUE|iquique)
+LOC=SCDA
+temp_vak
+;;
+CALAMA|calama)
+LOC=SCCF
+temp_vak
+;;
+ANTOFAGASTA|antofagasta)
+LOC=SCFA
+temp_vak
+;;
+COPIAPO|copiapo)
+LOC=SCHA
+temp_vak
+;;
+LASERENA|laserena)
+LOC=SCSE
+temp_vak
+;;
+VIÑA|viña|vina)
+LOC=SCVM
+temp_vak
+;;
+CURICO|curico)
+LOC=SCIC
+temp_vak
+;;
+CHILLAN|longaniza|chillan)
+LOC=SCCH
+temp_vak
+;;
+CONCEPCION|conce|concepcion)
+LOC=SCIE
+temp_vak
+;;
+ANGELES|angeles)
+LOC=SCGE
+temp_vak
+;;
+TEMUCO|temuco)
+LOC=SCTC
+temp_vak
+;;
+VALDIVIA|valdivia)
+LOC=SCVD
+temp_vak
+;;
+OSORNO|osorno)
+LOC=SCJO
+temp_vak
+;;
+PTMONTT|ptmontt)
+LOC=SCTE
+temp_vak
+;;
+CHAITEN|chaiten)
+LOC=SCTN
+temp_vak
+;;
+COIHAIQUE|coihaique)
+LOC=SCCY
+temp_vak
+;;
+BALMACEDA|balmaceda)
+LOC=SCBA
+temp_vak
+;;
+PTARENAS|patarenas)
+LOC=SCCI
+temp_vak
+;;
+
+
+
+  *)
+  LOC=SCQN
+  temp_vak
+     exit 1
+esac
+                                                                                                                            
+exit 0
+

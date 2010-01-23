@@ -1,0 +1,24 @@
+#!/bin/bash
+
+URL="$1"
+if [ "$URL" == "last" ]; then
+	if [ "$2" != "" ]; then
+		CLAUSE="AND nick=\"$2\""
+	fi
+	ZBOT_CHAN="$(echo $ZBOT_CHAN | sed 's/#//')"
+	DBI="$(cd ../bin && perl dbsh)"
+	URL="$(mysql $DBI -Bse "select url from urls where channel=\"$ZBOT_CHAN\" $CLAUSE order by u_id desc limit 1")"
+	EXTRA=" -> $URL"
+fi
+
+if [ "$URL" == "" ]; then
+	exit 1
+fi
+
+OUT="$(lynx --source "http://murl.net/?url=${URL}" | grep blockquote | head -1)"
+
+URL="$(echo $OUT | sed 's/<blockquote>//' | sed 's/<\/blockquote>//')"
+
+echo "Mofo url: $URL$EXTRA"
+
+exit 1

@@ -1,0 +1,55 @@
+ON IRC
+-------------------------
+/nick ZBot
+/msg NickServ register mypass my@email.com
+/quit
+
+AS ROOT
+-------------------------
+useradd zbot
+(cd ~zbot && tar zxvf ~/zbot.tgz)
+cd db
+vi zbot.sql
+   <Change usr/pass/db Info>
+save and exit
+mysql -uroot -p < zbot.sql
+cd ../bin
+mv bot.conf.rel bot.conf
+mv db.conf.rel db.conf
+mv usr.conf.rel usr.conf
+vi bot.conf
+   <Change Bot Info>
+   <Change NickServ Info>
+   <Change root on Misc to ~zbot>
+save and exit
+vi db.conf
+   <Change DataBase Info>
+save and exit
+vi usr.conf
+   <Add Yourself with level 1000>
+save and exit
+./zbot
+
+AS USER
+-------------------------
+get a mysql db and user acct.
+mkdir ~/zbot
+(cd ~/zbot && tar zxvf ~/zbot.tgz)
+cd db
+mysql -uzbot -p zbot_db < tables.sql
+cd ../bin
+mv bot.conf.rel bot.conf
+mv db.conf.rel db.conf
+mv usr.conf.rel usr.conf
+vi bot.conf
+   <Change Bot Info>
+   <Change NickServ Info>
+   <Change root on Misc to ~/zbot>
+save and exit
+vi db.conf
+   <Change DataBase Info>
+save and exit
+vi usr.conf
+   <Add Yourself with level 1000>
+save and exit
+./zbot

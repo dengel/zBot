@@ -1,0 +1,15 @@
+#!/bin/bash
+#ANOLOG="$(/usr/local/bin/anolog)"
+
+VERSION_BUILD="$1"
+if [ "$VERSION_BUILD" == "" ]; then
+CTRL="$(/usr/bin/svn cat svn://zero.org/repos/anope/trunk/version.log | grep -v ^#)"
+
+for key in $CTRL
+do
+        eval $key
+done
+fi
+
+ANOLOG="$(/usr/bin/sudo /usr/bin/svnlook log -r $VERSION_BUILD /repos/anope | sed 's/ :/:/g')"
+echo "$ANOLOG";

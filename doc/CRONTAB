@@ -1,0 +1,8 @@
+ON CLI
+-------------------------
+vi bin/chkbot
+   <Change BPATH to zbot's bin dir>
+save and exit
+crontab -e
+   <add 0,5,10,15,20,25,30,35,40,45,40,55 * * * * /home/zbot/bin/chkbot > /dev/null 2>&1
+save and exit

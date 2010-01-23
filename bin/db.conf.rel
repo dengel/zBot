@@ -1,0 +1,7 @@
+{
+# Info de la base de datos
+dbpass => 'mypass',
+dbhost => 'localhost',
+dbname => 'zbot_db',
+dbuser => 'zbot',
+}

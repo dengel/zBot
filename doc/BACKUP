@@ -1,0 +1,10 @@
+AT A SHELL PROMPT:
+-------------------------
+vi bin/dumpit
+   <Change paths acordingly>
+   <Change DataBase Info>
+   <save and exit>
+crontab -e
+   <add:>
+    30 2 * * 3,5,7 /tmp/ZbotClone/bin/dumpit > /dev/null 2>&1
+   <save and exit>

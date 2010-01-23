@@ -1,0 +1,8 @@
+#
+# Zbot "module" Configuration. 
+#
+# One entry per line. Public command then executable path
+# separated by a colon. All output is sent to the current
+# channel as a notice.
+#
+!acme:/home/dane/xbot/modules/acme

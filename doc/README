@@ -1,0 +1,12 @@
+ORDER TO READ THE DOC FILES
+---------------------------
+0 .- README
+1 .- INSTALL
+2 .- ADMIN
+3 .- CRONTAB
+4 .- BACKUP
+
+IMPORTANT: /msg ZBot delchan #mychan will *DROP* the table for #mychan, and
+all definitions will be lost! Make sure you DO NOT use "delchan", use "leave"
+instead. Also... always backup your tables!
+

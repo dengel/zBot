@@ -1,0 +1,3 @@
+#!/bin/sh
+SVNLOG="$(/usr/bin/svnlook log /repos/anope)"
+echo "$SVNLOG";

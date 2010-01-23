@@ -1,0 +1,1156 @@
+#!/usr/bin/perl
+#
+#
+
+# PerlModules
+use IO::Socket;
+use POSIX qw(strftime);
+#
+use User;
+use BotDB;
+
+# Version interna del bot
+my $iversion = "2.19";
+# Apagar buffering a stdout
+$|=1;
+
+my $config = require "bot.conf";
+
+# Info del bot 
+my $version=$config->{version} . " version $iversion";
+my $helptext="$version (http://zbot.zero.org/)";
+my $botnick=$config->{botnick};
+my $botname=$config->{botname};
+my $server=$config->{server};
+my $port=$config->{port};
+my @botchans=BotDB->listchans();
+
+# Services Info 
+my $chanserv=$config->{chanserv};
+my $nickserv=$config->{nickserv};
+my $npass=$config->{npass};
+my $nicksrv_string=$config->{nicksrv_string};
+my $nicksrv_identified=$config->{nicksrv_identified};
+
+# Misc -> Cambiar esto a un config file
+my $root=$config->{root};
+my $perlbot="$root/$config->{perlbot}";
+my $userconfig="$root/$config->{userconfig}";
+my $logfile="$root/$config->{logfile}";
+my $pidfile="$root/$config->{pidfile}";
+my $modfile="$root/$config->{modfile}";
+my $loglevel=2;
+my $reconnect=200;
+my $connected=1;
+my $remote;
+my $childpid;
+
+# Flood info y misc
+my $flood_times=$config->{flood_times};
+my $flood_secs=$config->{flood_secs};
+my $unig_time=$config->{unig_time};
+my $top_last=$config->{top_last};
+my @msg_times;
+my @msg_nicks;
+my @ignore_nicks;
+my @ignore_list;
+my @ignore_time;
+my %chash = ();
+
+my $getkey=0;
+
+# Bot levels...
+my $PERM_ADDCHAN  = $config->{perm_addchan};
+my $PERM_DELCHAN  = $config->{perm_delchan};
+my $PERM_AJOIN    = $config->{perm_ajoin};
+my $PERM_JOIN     = $config->{perm_join};
+my $PERM_LEAVE    = $config->{perm_leave};
+my $PERM_CHANLIST = $config->{perm_chanlist};
+my $PERM_MODLIST  = $config->{perm_modlist};
+my $PERM_RELOAD   = $config->{perm_reload};
+my $PERM_RESTART  = $config->{perm_restart};
+my $PERM_DIE      = $config->{perm_die};
+my $PERM_IGNORE   = $config->{perm_ignore};
+my $PERM_UNIGNORE = $config->{perm_unignore};
+my $PERM_IGLIST   = $config->{perm_iglist};
+my $PERM_LEARN    = $config->{perm_learn};
+my $PERM_RELEARN  = $config->{perm_relearn};
+my $PERM_REPLACE  = $config->{perm_replace};
+my $PERM_RENAME   = $config->{perm_rename};
+my $PERM_APPEND   = $config->{perm_append};
+my $PERM_LOCK     = $config->{perm_lock};
+my $PERM_UNLOCK   = $config->{perm_unlock};
+my $PERM_FORGET   = $config->{perm_forget};
+my $PERM_USERLIST = $config->{perm_userlist};
+my $PERM_USERADD  = $config->{perm_useradd};
+my $PERM_USERDEL  = $config->{perm_userdel};
+my $PERM_LINK     = $config->{perm_link};
+
+# Timezone information
+my $ZONE        = $config->{zone};
+my $YOURTIME    = $config->{yourtime};
+my $FORMATIME   = $config->{formatime};
+
+# Debug with flag = 1
+my $debugflag=$config->{debugflag};
+my $debugfile="$root/$config->{debugfile}";
+
+# URL Catcher
+my $URLCATCH = $config->{urlcatch};
+
+die "No existe el directorio $root: $!" if ( ! -d $root );
+die "No existe el programa $perlbot : $!" if ( ! -f $perlbot );
+die "El archivo $pidfile ya existe. El programa termino abnormalmente?.\nSaliendo...\n" if ( -f $pidfile && $ARGV[0] != 1);
+
+use strict;
+
+&modload;
+
+while ( $ARGV[0] != 1 ) {
+    if ( !defined ( $childpid = fork())) {
+        die "Fallo al tratar de correr fork";
+    } elsif ( $childpid == 0 ) {
+        User->Load_Users($userconfig);
+        while(1) {
+            &connect;
+            eval {
+                local $SIG{ALRM} = sub { die "desconectado" };
+                while(<$remote>) {
+                    &check($_);
+                }
+            };
+
+            if ( ! $connected ) {
+                sleep 10;
+            } else {
+                $connected=0;
+            }
+        }
+    } else {
+        open(PID,"> $pidfile");
+        print PID $childpid."\n";
+        close(PID);
+        exec("$perlbot 1");
+        die("fallo de ejecucion por $0");
+    }
+}
+
+sub modload {
+    if ( -f $modfile ) {
+        %chash = ();
+        my($command,$path);
+        open (MFILE, "< $modfile");
+        while (<MFILE>) {
+            next if (/^#/);
+            ($command, $path) = split(":",$_);
+            chomp($command);
+            chomp($path);
+            $chash{$command} = $path;
+        }
+        close(MFILE);
+    }
+}
+
+sub connect{
+    &log("conectando a " . $server . " por el puerto " . $port ,2);
+
+    $remote = IO::Socket::INET->new(
+        Proto     => "tcp",
+        PeerAddr  => $server,
+        PeerPort  => $port, 
+    );
+
+    unless ($remote) { 
+        &log("ERROR: Imposible conectarse a $server",1); 
+        return 
+    }
+
+    $remote->autoflush(1);
+
+    &raw("NICK", "$botnick");
+    &raw("USER", "$botnick $botnick $botnick :$botname");
+    &log("conectado a $server" ,2);
+    $connected=1;
+}
+
+sub log {
+    my($message, $level) = @_;
+    open(LOG, ">> $logfile");
+    print LOG $message."\n" if $level <= $loglevel;
+    close(LOG);
+}
+
+sub check {
+    my $response = shift;
+    my $wc = "#*";
+    chomp $response;
+    alarm($reconnect);
+
+    my $time = strftime "%s", localtime;
+    &ignore_isexpired($time);
+
+    my($immediate, $svrmsg, @tl) = split ":", $response;
+
+    my $text = join ":", @tl;
+    $text =~ s/[\n\r]//g;
+
+    if ("PING" eq substr $immediate, 0, 4) {
+        &raw("PONG", "$svrmsg");
+        &log("SERVER PING",3);
+    } elsif("ERROR" eq substr $immediate, 0, 5) {
+        close($remote);
+    } else {
+        my @buffer = split " ", $svrmsg;
+        my $remote_nick = (split "!", $svrmsg)[0];
+        my $remote_host = (split "!", $buffer[0])[1];
+
+        # my $stat = &check_ignore($remote_nick);
+        # next if ( $stat  == 1 );
+        my $ignored = &check_ignore($remote_nick);
+        next if ( $ignored  == 1 );
+
+        &debug($text, @buffer) if ( $debugflag == 1 );
+
+        if ($buffer[1] eq "PRIVMSG") {
+
+            my $remote_level;
+            my $msg_channel = lc $buffer[2];
+            if ($msg_channel eq lc $botnick) {
+
+                # MUST VERIFY THAT THIS STILL WORKS
+                my $secs = &check_flood($remote_nick, $time);
+                if ( $secs != 0 ) {
+                    &log("Ignorando a $remote_nick por $unig_time segundos. \($flood_times mensajes en $secs segundos\)", 2);
+                    next;
+                }
+
+                $text = pack_line($text);
+                my($command, @argv) = split(/ /,$text);
+                my $argc = @argv;
+                $command = lc $command;
+                SWITCH: for ($command) {
+                    /^die$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_DIE);
+                        return if (! $remote_level);
+
+                        &kill_daemon($remote_nick);
+                    };
+
+                    /^restart$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_RESTART);
+                        return if (! $remote_level);
+
+                        &restart_daemon($remote_nick);
+                    };
+
+                    /^help$/ && do {
+                        &help($remote_nick);
+                    };
+
+                    /version$/ && do {
+                        &raw("NOTICE", "$remote_nick :VERSION $version");
+                    };
+
+                    /^addchan$/ && do {
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :addchan <channel>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_ADDCHAN);
+                        return if (! $remote_level);
+
+                        if (BotDB->addchan( $argv[0] ) == 0 ) {
+                            &raw("JOIN", "$argv[0]");
+                            &raw("NOTICE", "$remote_nick :Canal $argv[0] agregado a la lista de canales");
+                            @botchans=BotDB->listchans();
+                        }
+                    };
+
+                    /^delchan$/ && do {
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :delchan <channel>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_DELCHAN);
+                        return if (! $remote_level);
+
+                        if (BotDB->delchan( $argv[0] ) == 0 ) {
+                            &raw("PART", "$argv[0] :Channel removed");
+                            &raw("NOTICE", "$remote_nick :el canal $argv[0] ha sido borrado");
+                            @botchans=BotDB->listchans();
+                        }
+                    };
+
+                    /^ajoin$/ && do {
+                        if ( ($argc != 2) || ( (lc($argv[1]) ne "on") && (lc($argv[1]) ne "off") ) ) {
+                            &raw("NOTICE", "$remote_nick :ajoin <channel> <ON|OFF>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_AJOIN);
+                        return if (! $remote_level);
+
+                        if ($argv[1] eq "on") {
+                            if (BotDB->joinchan( $argv[0] ) == 0 ) {
+                                &raw("NOTICE", "$remote_nick :canal $argv[0] agregado a la lista de canales a ingresar");
+                                @botchans=BotDB->listchans();
+                            } else {
+                                &raw("NOTICE", "$remote_nick :El canal $argv[0] no existe en la base de datos.");
+                            }
+                        } elsif ($argv[1] eq "off") {
+                            if (BotDB->leavechan( $argv[0] ) == 0 ) {
+                                &raw("NOTICE", "$remote_nick :canal $argv[0] removido de la lista de canales a ingresar");
+                                @botchans=BotDB->listchans();
+                            } else {
+                                &raw("NOTICE", "$remote_nick :El canal $argv[0] no existe en la base de datos.");
+                            }
+                        }
+
+                    };
+
+                    /^join$/ && do {
+                        if ( $argc < 1 ) {
+                            &raw("NOTICE", "$remote_nick :join <channel> [key]");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_JOIN);
+                        return if (! $remote_level);
+
+                        &raw("JOIN", "$argv[0] $argv[1]");
+                    };
+
+                    /^leave$/ && do {
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :leave <channel>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_LEAVE);
+                        return if (! $remote_level);
+
+                        &raw("PART", "$argv[0] :Leaving");
+                    };
+
+                    /^userlist$/ && do {
+                        my (@rlist, $cnt);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :userchan <channel>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_USERLIST);
+                        return if (! $remote_level);
+
+                        @rlist=User->List_Users( $argv[0] );
+                        $cnt = @rlist;
+                        if ($cnt) {
+                            &raw("NOTICE", "$remote_nick :Userlist for channel $argv[0]:");
+                            my $entry;
+                            foreach $entry (@rlist) {
+                                &raw("NOTICE", "$remote_nick :$entry");
+                            }
+                            &raw("NOTICE", "$remote_nick :Total of $cnt users");
+                        } else {
+                            &raw("NOTICE", "$remote_nick :El canal $argv[0] no tiene usuarios");
+                        }
+                    };
+
+                    /^useradd$/ && do {
+                        my $result;
+
+                        if ( $argc != 3 ) {
+                            &raw("NOTICE", "$remote_nick :useradd <channel> <mask> <level>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_USERADD);
+                        return if (! $remote_level);
+
+                        $result=BotDB->useradd( $argv[0], $argv[1], $argv[2], $remote_level);
+                        &raw("NOTICE", "$remote_nick :$result");
+                        User->Load_Users($userconfig);
+                    };
+
+                    /^userdel$/ && do {
+                        my $result;
+
+                        if ( $argc != 2 ) {
+                            &raw("NOTICE", "$remote_nick :userdel <channel> <mask>");
+                            return;
+                        }
+
+                        return if (! ck_chan($remote_nick, $argv[0]) );
+
+                        $remote_level=ck_perm($remote_nick, $remote_host, $argv[0], $PERM_USERADD);
+                        return if (! $remote_level);
+
+                        $result=BotDB->userdel( $argv[0], $argv[1], $remote_level);
+                        &raw("NOTICE", "$remote_nick :$result");
+                        User->Load_Users($userconfig);
+                    };
+
+                    /^chanlist$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_CHANLIST);
+                        return if (! $remote_level);
+
+                        my $list = join " ", @botchans;
+                        &raw("NOTICE", "$remote_nick :Canales:");
+                        &raw("NOTICE", "$remote_nick :$list");
+                    };
+
+                    /^reload$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_RELOAD);
+                        return if (! $remote_level);
+
+                        User->Load_Users($userconfig);
+                        &modload;
+                        &raw("NOTICE", "$remote_nick :Config and modules reloaded");
+                    };
+
+                    /^modlist$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $wc, $PERM_MODLIST);
+                        return if (! $remote_level);
+
+                        my $list;
+                        while ( my($key, $value) = each(%chash) ) {
+                                $list .= "$key ";
+                        }
+
+                        &raw("NOTICE", "$remote_nick :Modules:");
+                        &raw("NOTICE", "$remote_nick :$list");
+                    };
+
+
+                }
+            } elsif ( $msg_channel =~ /^#/ ) {
+                my $botchan;
+                my $i;
+                my $counter = @botchans;
+                for ($i=0; $i < $counter; $i++)  {
+                    if ( lc $msg_channel eq lc $botchans[$i] ) {
+                        $botchan = $msg_channel;
+                        $i = $counter;
+                    }
+                }
+
+                return if ( $botchan eq "" ); 
+                my $secs = &check_flood($remote_nick, $time);
+                if ( $secs != 0 ) {
+                    &log("Ignorando a $remote_nick por $unig_time segundos. \($flood_times mensajes en $secs segundos\)", 2);
+                    next;
+                }
+
+                #
+                # PUBLIC COMMANDS
+                #
+                $text = pack_line($text);
+                my($command, @argv) = split(/ /,$text);
+                my $argc = @argv;
+                $command = lc $command;
+                SWITCH: for ($command) {
+
+                    /^\?$/ && do {
+                        if ( $argv[0] ) {
+                            my $meaning = BotDB->botquery($remote_nick, $botchan, $argv[0], $argv[1], $argv[2]);
+                            if ( $meaning ) {
+                                &raw("NOTICE", "$botchan :$argv[0] == $meaning");
+                            }
+                            return 0;
+                        }
+                    };
+
+                    /^\?\?$/ && do {
+                        if ( $argv[0] ) {
+                            my $locked   = "";
+                            my $linked   = "";
+                            # Should get a hash for the complete record instead.
+                            my $meaning = BotDB->botquery($remote_nick, $botchan, $argv[0]);
+                            my $whoset  = BotDB->whoset($remote_nick, $botchan, $argv[0]);
+                            my $when    = BotDB->getdate($remote_nick, $botchan, $argv[0]);
+                            my $myid    = BotDB->getid($botchan, $argv[0]);
+                            my $myhits  = BotDB->gethits($botchan, $argv[0]);
+                            my $mylock  = BotDB->getlock($botchan, $argv[0]);
+                            my $mylink  = BotDB->getlink($botchan, $argv[0]);
+                            if ( $meaning ) {
+                                &raw("NOTICE", "$botchan :$argv[0] == $meaning");
+                                if ( $whoset ) {
+                                    if( $mylock ) { $locked="[locked]"; }
+                                    if( $mylink ) { $linked="[linked to $mylink]"; }
+                                    &raw("NOTICE", "$botchan :$argv[0] ($myid) seteado por $whoset [$when] [$myhits hits] $linked $locked");
+                                }
+                                return 0;
+                            }
+                        }
+                    };
+
+                    /^\![0-9]*$/ && do {
+                        my $cnum = $command;
+                        $cnum =~ s/\!//g;
+                        my $meaning = BotDB->botnumquery($remote_nick, $botchan, $cnum);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$botchan :Quote $cnum: $meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!rand$/ && do {
+                        my $meaning = BotDB->botrandquery($remote_nick, $botchan, $argv[0]);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$botchan :$meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!whoset$/ && do {
+                        if ( $argv[0] ) {
+                            my $whoset = BotDB->whoset($remote_nick, $botchan, $argv[0]);
+                            my $when   = BotDB->getdate($remote_nick, $botchan, $argv[0]);
+                            if ( $whoset ) {
+                                &raw("NOTICE", "$botchan :$argv[0] seteado por $whoset [$when]");
+                                return 0;
+                            }
+                        }
+                    };
+
+                    /^\!stats$/ && do {
+                        my $cnt = BotDB->getcnt($remote_nick, $botchan, $argv[0]);
+                        &raw("NOTICE", "$botchan :$cnt entries.");
+                        return 0;
+                    };
+
+                    /^\!version$/ && do {
+                        &raw("NOTICE", "$botchan :Version $version");
+                        return 0;
+                    };
+                    /^\!getkey$/ && do {
+                        $getkey="$botchan";
+                        &raw("PRIVMSG","$chanserv :GETKEY #linux");
+                        return 0;
+                    };
+                    /^\!time$/ && do {
+                        &timedate($botchan);
+                        return 0;
+                    };
+
+                    /^\!ignore$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_IGNORE);
+                        return if (! $remote_level);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!ignore <nick>");
+                            return;
+                        }
+
+                        my $pos=-1;
+                        for (my $i = 0 ; $i != @ignore_nicks; $i++) {
+                            if (lc($argv[0]) eq lc($ignore_nicks[$i])) {
+                                $pos=$i;
+                                # Should brake here?
+                            }
+                        }
+
+                        if ($pos >= 0) {
+                            &raw("NOTICE", "$remote_nick :$argv[0] is already ignored.");
+                        } else {
+                            push (@ignore_nicks, $argv[0]);
+                            &raw("NOTICE", "$argv[0] :You are now being ignored.");
+                            &raw("NOTICE", "$remote_nick :$argv[0] is now being ignored.");
+                        }
+                        return 0;
+                    };
+
+                    /^\!unignore$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_UNIGNORE);
+                        return if (! $remote_level);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!unignore <nick>");
+                            return;
+                        }
+
+                        my $pos=-1;
+                        for (my $i = 0 ; $i != @ignore_nicks; $i++) {
+                            if (lc($argv[0]) eq lc($ignore_nicks[$i])) {
+                                $pos=$i;
+                            }
+                        }
+                        if ($pos >= 0) {
+                            splice (@ignore_nicks,$pos,1);
+                            &raw("NOTICE", "$argv[0] :You are not being ignored anymore.");
+                            &raw("NOTICE", "$remote_nick :$argv[0] is not being ignored anymore.");
+                        } else {
+                            &raw("NOTICE", "$remote_nick :$argv[0] is not on the ignore list.");
+                        }
+                        return 0;
+                    };
+
+                    /^\!igclear$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_UNIGNORE);
+                        return if (! $remote_level);
+                        @ignore_nicks = ();
+                        &raw("NOTICE", "$remote_nick :Ignore list cleared");
+                        return 0;
+                    };
+
+                    /^\!iglist$/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_IGLIST);
+                        return if (! $remote_level);
+
+                        my $buffer;
+                        for (my $i = 0 ; $i != @ignore_nicks; $i++) {
+                            $buffer .= "$ignore_nicks[$i] ";
+                        }
+                        &raw("NOTICE", "$remote_nick :Ignore list: $buffer");
+                        return 0;
+                    };
+
+                    /^\!search$/ && do {
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!search <pattern>");
+                            return;
+                        }
+                        if ( $argv[0] eq "\*" ) {
+                            &raw("NOTICE", "$remote_nick :Listar \* no permitido");
+                            return;
+                        }
+                        my $meaning = BotDB->list($botchan, $argv[0]);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$remote_nick :$argv[0] == $meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!last$/ && do {
+                        my $meaning = BotDB->xlast($botchan, $top_last);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$botchan :Last $top_last == $meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!top$/ && do {
+                        my $meaning = BotDB->xtop($botchan, $top_last);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$botchan :Top $top_last == $meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!find$/ && do {
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!find <pattern>");
+                            return;
+                        }
+                        if ( $argv[0] eq "\*" ) {
+                            &raw("NOTICE", "$remote_nick :Listar \* no permitido");
+                            return;
+                        } elsif ( length($argv[0]) < 3 ) {
+                            &raw("NOTICE", "$remote_nick :Minimo de 3 caracteres bara busqueda.");
+                            return;
+                        }
+                        my $meaning = BotDB->find($botchan, $argv[0]);
+                        if ( $meaning ) {
+                            &raw("NOTICE", "$remote_nick :$argv[0] == $meaning");
+                        }
+                        return 0;
+                    };
+
+                    /^\!learn/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LEARN);
+                        return if (! $remote_level);
+
+                        if ( $argc < 2 ) {
+                            &raw("NOTICE", "$remote_nick :!learn <key> <definition>");
+                            return;
+                        }
+
+                        my $learned = BotDB->learn($remote_nick, $remote_host, $botchan, @argv);
+                        if ( $learned ne "" ) {
+                            &raw("NOTICE", "$remote_nick :$argv[0] == $learned");
+                        }
+                    };
+
+                    /^\!flearn/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LEARN);
+                        return if (! $remote_level);
+
+                        if ( $argc < 2 ) {
+                            &raw("NOTICE", "$remote_nick :!flearn <key> <definition>");
+                            return;
+                        }
+
+                        $argv[0] = BotDB->getnext($botchan, $argv[0]);
+                        my $learned = BotDB->learn($remote_nick, $remote_host, $botchan, @argv);
+                        if ( $learned ne "" ) {
+                            &raw("NOTICE", "$botchan :$argv[0] == $learned");
+                        }
+                    };
+
+                    /^\!relearn/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_RELEARN);
+                        return if (! $remote_level);
+
+                        if ( $argc < 2 ) {
+                            &raw("NOTICE", "$remote_nick :!relearn <key> <definition>");
+                            return;
+                        }
+
+                        my $locked = BotDB->getlock($botchan, $argv[0]);
+                        if (! $locked) {
+                            my $forgot  = BotDB->delete($botchan, $argv[0]);
+                            my $learned = BotDB->learn($remote_nick, $remote_host, $botchan, @argv);
+                            if ( $learned ne "" ) {
+                                &raw("NOTICE", "$remote_nick :$argv[0] == $learned");
+                            }
+                        } else {
+                            &raw("NOTICE", "$remote_nick :$argv[0] está protegido, usa !unlock para sacar la proteccion.");
+                        }
+                    };
+
+                    /^\!replace/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_REPLACE);
+                        return if (! $remote_level);
+
+                        if ( $argc != 3 ) {
+                            &raw("NOTICE", "$remote_nick :!replace <key> <old> <new>");
+                            return;
+                        }
+
+                        my $replaced = BotDB->replace($remote_nick, $botchan, $argv[0], $argv[1], $argv[2]);
+                        if ( $replaced ne "" ) {
+                            &raw("NOTICE", "$remote_nick :$argv[0] == $replaced");
+                        }
+                    };
+
+                    /^\!rename/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_RENAME);
+                        return if (! $remote_level);
+
+                        if ( $argc != 2 ) {
+                            &raw("NOTICE", "$remote_nick :!rename <oldkey> <newkey>");
+                            return;
+                        }
+
+                        my $locked = BotDB->getlock($botchan, $argv[0]);
+                        if (! $locked) {
+                            my $err1 = BotDB->rename($remote_nick, $botchan, $argv[0], $argv[1]);
+                            if ( $err1 ne "" ) {
+                                &raw("NOTICE", "$remote_nick :$err1");
+                            } else {
+                                &raw("NOTICE", "$remote_nick :$argv[0] renamed to $argv[1]");
+                            }
+                        } else {
+                            &raw("NOTICE", "$remote_nick :$argv[0] está protegido, usa !unlock para sacar la proteccion.");
+                        }
+                    };
+
+                    /^\!greet/ && do {
+                        &raw("NOTICE", "$botchan :Hola po tonto weon!");
+                    };
+
+                    /^\!append/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_APPEND);
+                        return if (! $remote_level);
+
+                        if ( $argc < 2 ) {
+                            &raw("NOTICE", "$remote_nick :!append <key> <text>");
+                            return;
+                        }
+
+                        my $locked = BotDB->getlock($botchan, $argv[0]);
+                        if (! $locked) {
+                            my $learned = BotDB->append($remote_nick, $remote_host, $botchan, @argv);
+                            if ( $learned ne "" ) {
+                                &raw("NOTICE", "$remote_nick :$learned appended to $argv[0]");
+                            }
+                        } else {
+                            &raw("NOTICE", "$remote_nick :$argv[0] está protegido, usa !unlock para sacar la proteccion.");
+                        }
+                    };
+
+                    # Return the user level.
+                    /^\!level/ && do {
+                        my $level = User->Get_Permissions($remote_nick, $remote_host, $botchan);
+                        &raw("NOTICE", "$remote_nick :$remote_nick has level $level");
+                    };
+
+                    /^\!lock/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LOCK);
+                        return if (! $remote_level);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!lock <key>");
+                            return;
+                        }
+
+                        BotDB->lock($botchan, $argv[0]);
+                        &raw("NOTICE", "$remote_nick :$argv[0] locked!");
+                        return;
+                    };
+
+                    /^\!unlock/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_UNLOCK);
+                        return if (! $remote_level);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!unlock <key>");
+                            return;
+                        }
+
+                        BotDB->unlock($botchan, $argv[0]);
+                        &raw("NOTICE", "$remote_nick :$argv[0] unlocked!");
+                        return;
+                    };
+
+                    /^\!forget/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_FORGET);
+                        return if (! $remote_level);
+
+                        if ( $argc != 1 ) {
+                            &raw("NOTICE", "$remote_nick :!forget <key>");
+                            return;
+                        }
+
+                        my $locked = BotDB->getlock($botchan, $argv[0]);
+                        if (! $locked) {
+                            BotDB->delete($botchan, $argv[0]);
+                            &raw("NOTICE", "$remote_nick :$argv[0] borrado");
+                            return;
+                        } else {
+                            &raw("NOTICE", "$remote_nick :$argv[0] está protegido, usa !unlock para sacar la proteccion.");
+                        }
+                    };
+
+                    /^\!link/ && do {
+                        $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LINK);
+                        return if (! $remote_level);
+
+                        if ( $argc < 2 ) {
+                            &raw("NOTICE", "$remote_nick :!link <value1> <value2>");
+                            return;
+                        }
+
+                        my $mask = "$remote_nick!$remote_host";
+                        my $linked = BotDB->link($botchan, $mask, $argv[0], $argv[1]);
+                        if ( $linked ne "" ) {
+                            &raw("NOTICE", "$remote_nick :$linked");
+                        }
+                        return;
+                    };
+
+                    /^\!url$/ && do {
+                        if ( $URLCATCH ) {
+                            my $arg;
+                            if ( $argc < 1 ) {
+                                $arg="0";
+                            } else {
+                                $arg="$argv[0]";
+                            }
+                            my $meaning = BotDB->geturl($botchan, $arg);
+                            if ( $meaning ) {
+                                &raw("NOTICE", "$botchan :Last URL == $meaning");
+                            }
+                        }
+                        return;
+                    };
+
+                }
+
+                # URL Catcher. This method is faster than using an external
+                # Perl module. It needs to be expanded to cover other protocols
+                # and to return the last url from a multi-url line instead of
+                # the first.
+                if ( $URLCATCH ) {
+                    if ( $text =~ m/([http|ftp|https]*:\/\/[\S]*)/i ) {
+                        BotDB->addurl($botchan, $remote_nick, $1);
+                    }
+                };
+
+                # Check for external modules
+                if ($chash{$command}) {
+                    if ( -x $chash{$command} ) {
+                        my $oline;
+                        my $arg;
+                        foreach (@argv) { $arg .= "'$_' "; }
+                        $arg =~ s/;//g;
+                        # Passing more info to the shell...
+                        $ENV{ZBOT_CHAN} = "$botchan";
+                        $ENV{ZBOT_NICK} = "$remote_nick";
+                        $ENV{ZBOT_PERM} = User->Get_Permissions($remote_nick, $remote_host, $botchan);
+                        my @output=`$chash{$command} $arg`;
+                        foreach (@output) {
+                            my $oline=$_;
+                            # START - Experimental Code
+                            if ( /^\? / ) {
+                                my @cout = split(/ /, $oline) ;
+                                chomp($cout[0]);
+                                chomp($cout[1]);
+                                chomp($cout[2]);
+                                chomp($cout[3]);
+                                shift(@cout);
+                                my $meaning = BotDB->botquery($remote_nick, $botchan, $cout[0], $cout[1], $cout[2]);
+                                if ( $meaning ) {
+                                    &raw("NOTICE", "$botchan :$cout[0] == ".$meaning);
+                                }
+                            } 
+                            # END - Experimental Code
+                            else {
+                                &raw("PRIVMSG", "$botchan :$oline");
+                            }
+                        }
+                    } else {
+                        &raw("NOTICE", "$remote_nick :$command failed. Can't execute $chash{$command}.");
+                    }
+                }
+            }
+        } elsif($buffer[1] eq '004') {
+            &raw("MODE","$botnick +i");
+            &raw("PRIVMSG","$nickserv :IDENTIFY $npass");
+            # &raw("PRIVMSG", "hostserv :chghost");
+            foreach (@botchans) {
+                &raw("JOIN", $_);
+            }
+        } elsif($buffer[1] eq '475') {
+            &raw("PRIVMSG","$chanserv :GETKEY $buffer[3]");
+        } elsif ($buffer[1] eq "NOTICE") {
+            my $remote_nick = (split "!", $svrmsg)[0];
+            if ( ( lc $remote_nick eq lc $nickserv ) && ( $text =~ /$nicksrv_string/ ) ) {
+                &raw("PRIVMSG","$nickserv :IDENTIFY $npass");
+            }
+            if ( ( lc $remote_nick eq lc $nickserv ) && ( $text =~ /$nicksrv_identified/ ) ) {
+            }
+            if ( ( lc $remote_nick eq lc $chanserv ) && ( $text =~ /KEY/ ) ) {
+                if ($getkey) {
+                    &raw("PRIVMSG","$getkey :$text");
+                    $getkey=0;
+                } else {
+                    my $mtext = $text;
+                    $mtext =~ s/KEY// ;
+                    &raw("JOIN", "$mtext");
+                }
+            }
+        } elsif ($buffer[1] eq "KICK") {
+#       if (( lc $buffer[2] eq lc $botchan) and ( lc $buffer[3] eq lc $botnick )) {
+            if ( lc $buffer[3] eq lc $botnick ) {
+                &raw("JOIN", $buffer[2]);
+            }
+        } elsif ($buffer[1] eq "NICK") {
+            my $remote_nick = (split "!", $svrmsg)[0];
+            if ( lc $remote_nick eq lc $botnick ) {
+                &raw("NICK", "$botnick");
+            }
+        }
+    }
+}
+
+# Remove leading, and trailing spaces, and pack multiple spaces into one.
+sub pack_line {
+    
+    my $text=shift;
+    $text =~ s/^[\s]*//g;
+    $text =~ s/[\s]*$//g;
+    $text =~ s/[\s]+/ /g;
+    return $text;
+
+}
+
+sub ck_perm {
+
+    my ($remote_nick, $remote_host, $channel, $level) = @_ ;
+    my $remote_level=User->Get_Permissions($remote_nick, $remote_host, $channel);
+    if ( $remote_level < $level ) {
+        &raw("NOTICE", "$remote_nick :Permiso denegado! ($remote_level < $level)");
+        return 0;
+    }
+    return $remote_level;
+
+}
+
+sub ck_chan {
+
+    my ($remote_nick,$channel) = @_ ;
+    if ( ! ($channel =~ /^#/) ) {
+        &raw("NOTICE", "$remote_nick :canal debe comenzar con #");
+        return 0;
+    }
+    return 1;
+}
+
+sub raw {
+    alarm($reconnect);
+    print $remote "$_[0] $_[1]\n"; 
+}
+
+sub kill_daemon {
+    my ($remote_nick) = @_;
+    &raw("NOTICE", "$remote_nick :Dying...");
+    &raw("QUIT", ":Have you choked your chicken?");
+    &log($remote_nick . " uso DIE" ,2);
+    unlink $pidfile;
+    exit 0;
+}
+
+sub restart_daemon {
+    my ($remote_nick) = @_;
+    &raw("NOTICE", "$remote_nick :Restarting...");
+    &raw("QUIT", ":Restarting...");
+    &log($remote_nick . " uso RESTART" ,2);
+    unlink $pidfile;
+    system("$perlbot");
+    exit 0;
+}
+
+sub help {
+    my ($remote_nick) = @_;
+    &raw("NOTICE", "$remote_nick :$botnick $helptext");
+}
+
+sub timedate {
+    my ($botchan) = @_;
+    my $dif_time;
+    my $zestado;
+    my $time;
+    my $date;
+    my @meses;
+    push(@meses,"Enero");
+    push(@meses,"Febrero");
+    push(@meses,"Marzo");
+    push(@meses,"Abril");
+    push(@meses,"Mayo");
+    push(@meses,"Junio");
+    push(@meses,"Julio");
+    push(@meses,"Agosto");
+    push(@meses,"Septiembre");
+    push(@meses,"Octubre");
+    push(@meses,"Noviembre");
+    push(@meses,"Diciembre");
+    my @dias;
+    push(@dias,"Domingo");
+    push(@dias,"Lunes");
+    push(@dias,"Martes");
+    push(@dias,"Miercoles");
+    push(@dias,"Jueves");
+    push(@dias,"Viernes");
+    push(@dias,"Sabado");
+    my ($sec,$min,$hora,$dia,$mes,$ano,$wdia, $ydia, $z) =
+(localtime(time));
+    if ($z eq "1") { $dif_time = ($YOURTIME - $ZONE - 1); }
+    else { $dif_time = ($YOURTIME - $ZONE) };
+    $dif_time = $dif_time * 3600;
+    my ($sec, $min, $hora, $dia, $mes, $ano, $wdia, $ydia, $z) =
+(localtime(time + $dif_time));
+    if ($sec < 10) { $sec = "0$sec"; }
+    if ($min < 10) { $min = "0$min"; }
+    if ($dia < 10) { $dia = "0$dia"; }
+    if ($FORMATIME == 12) {
+       if ($hora == 12) { $zestado = "pm"; } else { $zestado = "am"; }
+       if ($hora == 0) { $hora = $hora + 12; $zestado = "am"; }
+       if ($hora > 12) { $hora = $hora - 12; $zestado = "pm"; }
+       $time = "$hora:$min:$sec $zestado";
+    }
+    else { $time = "$hora:$min:$sec"; }
+    $ano += "1900";
+    $date = "$dias[$wdia] $dia $meses[$mes] del $ano";
+    &raw("PRIVMSG", "$botchan :Son las $time del $date");
+}
+
+sub debug {
+    my ($text, @buffer) = @_;
+    my $num = @buffer;
+    my $i;
+    open (DEBUG, ">> $debugfile");
+    print DEBUG "$buffer[0] ";
+    for ($i = 1 ; $i < $num; $i++ ) {
+        print DEBUG "$buffer[$i] ";
+    }
+    print DEBUG ":$text\n";
+    close(DEBUG);
+}
+
+sub check_flood {
+    my ($nick, $time) = @_;
+    my $array_size = @msg_nicks;
+    my $match = 0;
+    my ($secs, $time_holder);
+    my $i;
+
+    if ($array_size >= 10) {
+        pop(@msg_nicks);
+        pop(@msg_times);
+    }
+
+    unshift(@msg_nicks, $nick);
+    unshift(@msg_times, $time);
+
+    for ($i = 0 ; $i != $array_size; $i++) {
+        if ($nick eq $msg_nicks[$i]) {
+            $match++;
+            $time_holder = $i if ( $match == $flood_times );
+        }
+    }
+
+    if ($match >= $flood_times ) {
+        $secs = $time - $msg_times[$time_holder];
+        if ($secs <= $flood_secs) {
+            push (@ignore_list, $nick);
+            push (@ignore_time, $time);
+            $secs = 1 if ( $secs == 0 );
+            return ($secs);
+        }
+    }
+    return 0;
+}
+
+sub check_ignore {
+    my ($nick) = @_;
+    my $array_size1 = @ignore_list;
+    my $array_size2 = @ignore_nicks;
+    my $i;
+    my $ignore = 0;
+    for ($i = 0 ; $i != $array_size1; $i++) {
+        # has to be case insensitive...
+        if (lc($nick) eq lc($ignore_list[$i])) {
+            $ignore = 1;
+        }
+    }
+    if (! $ignore ) {
+        for ($i = 0 ; $i != $array_size2; $i++) {
+            # has to be case insensitive...
+            if (lc($nick) eq lc($ignore_nicks[$i])) {
+                $ignore = 1;
+            }
+        }
+    }
+
+    return $ignore;
+}
+
+sub ignore_isexpired {
+    my ($time) = @_;
+    my $array_size = @ignore_time;
+    if ( $array_size != 0 ) {
+        if ( ( $time - ( $ignore_time[$array_size - 1] ) ) > $unig_time ) {
+            pop(@ignore_time);
+            my $nick = pop(@ignore_list);
+        }
+    }
+    return 0;
+}

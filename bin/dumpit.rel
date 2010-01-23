@@ -1,0 +1,4 @@
+#!/bin/sh
+FILE01="/tmp/ZbotClone/db/zbot-bk.sql"
+mysqldump -uzbot -pmypass zbot_db > $FILE01
+/usr/bin/savelog -c 5 $FILE01

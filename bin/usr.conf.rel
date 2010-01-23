@@ -1,0 +1,10 @@
+# Este es el archivo de usuarios globales. El acceso es global
+# para TODOS los canales. Supuestamente debe ser usado para 
+# bot admins solamente.
+#
+# El formato es nick:mascara:nivel
+#
+# La mascara debe ser en la forma ident@host. Wildcard es *@*
+# 
+# Ej:
+# dengel:dane@*.irczone.cl:1000

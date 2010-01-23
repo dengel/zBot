@@ -1,0 +1,68 @@
+{
+# Information
+version => 'IRCZONE Infobot',
+botnick => 'ZbotClone',
+botname => 'IRCZONE Infobot',
+server  => 'localhost',
+port    => 6667,
+
+# Services
+chanserv           => 'ChanServ',
+nickserv           => 'NickServ',
+npass              => 'mypass',
+nicksrv_string     => 'Este nick esta registrado',
+nicksrv_identified => 'Clave aceptada - Has sido reconocido.',
+
+# Misc 
+root       => '/tmp/ZbotClone',
+perlbot    => 'bin/zbot',
+userconfig => 'bin/usr.conf',
+logfile    => 'log/zbot.log',
+pidfile    => 'log/zbot.pid',
+
+# Flood
+flood_times => 10,
+flood_secs  => 10,
+unig_time   => 600,
+top_last    => 10,
+
+# Levels
+perm_addchan  => 1000,
+perm_delchan  => 1000,
+perm_reload   => 1000,
+perm_restart  => 1000,
+perm_die      => 1000,
+perm_join     => 90,
+perm_leave    => 90,
+perm_chanlist => 90,
+perm_ignore   => 90,
+perm_unignore => 90,
+perm_lock     => 90,
+perm_unlock   => 90,
+perm_iglist   => 50,
+perm_relearn  => 75,
+perm_replace  => 75,
+perm_rename   => 75,
+perm_append   => 75,
+perm_forget   => 75,
+perm_learn    => 10,
+perm_userlist => 100,
+perm_useradd  => 100,
+perm_userdel  => 100,
+perm_ajoin    => 100,
+perm_modlist  => 10,
+perm_link  => 10,
+
+# Time
+zone          => '-4', # Server timezone
+yourtime      => '-4', # Your timezone
+formatime     => '24', # 12 or 24 hour format
+
+# Misc
+urlcatch   => 1, # Enable URL catcher.
+modfile       => 'bin/modules.conf',
+
+# Debug with flag => 1
+debugflag => 0,
+debugfile => 'log/debug.log',
+}

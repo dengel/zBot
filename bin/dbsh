@@ -1,0 +1,14 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+# Preloaded methods go here.
+my $config = require "./db.conf.rel";
+
+# Informacion para la DB         
+my $dbhost=$config->{dbhost};
+my $dbname=$config->{dbname};
+my $dbuser=$config->{dbuser};
+my $dbpass=$config->{dbpass};
+
+print "-u$dbuser -h$dbhost -p$dbpass $dbname\n"

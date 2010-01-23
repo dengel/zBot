@@ -1,0 +1,28 @@
+ADMIN COMMANDS:
+----------------
+/msg ZBot DIE                                  Bot shutdown.
+/msg ZBot RESTART                              Bot restart.
+/msg ZBot RELOAD                               Reload usr.conf and modules.conf
+/msg ZBot ADDCHAN <chan>                       Creates a new channel table and joins it
+/msg ZBot DELCHAN <chan>                       Drops a channel table and leaves it
+/msg ZBot JOIN <chan>  [key]                   Joins a channel
+/msg ZBot LEAVE <chan>                         Leaves a channel
+/msg ZBot HELP                                 Provides help
+/msg ZBot VERSION                              Shows version
+/msg ZBot CHANLIST                             Shows current channel tables
+/msg ZBot AJOIN <chan> <ON|OFF>                Add a channel to the autoload list
+/msg ZBot MODLIST                              Show the current loaded modules
+/msg ZBot USERLIST <channel>                   Show the users list for the <channel>
+/msg ZBot USERADD <channel> <mask> <level>     Add a user
+/msg ZBot USERDEL <channel> <mask>             Delete a user
+
+EXAMPLE:
+---------------
+# Induces a bot into my channel
+/msg ZBot ADDCHAN #mychan
+
+# Makes bot leave my channel but preserve the table
+/msg ZBot LEAVE #mychan
+
+#Makes it join back again
+/msg ZBot JOIN #mychan

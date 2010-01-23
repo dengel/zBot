@@ -1,0 +1,10 @@
+#!/bin/sh
+ 
+if [ $# -gt 0 ]; then
+	out="$(lynx -dump -width=256 http://bugs.anope.org/gate.php?bugid=$1)"
+	echo $out
+	echo "Bug $1: http://bugs.anope.org/show_bug.cgi?id=$1"
+else
+	out="$(lynx -dump -width=256 http://bugs.anope.org/gate.php?stats=$1 | grep bugs)"
+	echo $out
+fi

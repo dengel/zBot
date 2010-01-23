@@ -1,0 +1,45 @@
+#!/usr/bin/perl
+# gcalc.pl - Google calculator example
+#
+# © Copyright, 2004-2005 By John Bokma, http://johnbokma.com/
+#
+# This script is for educational purposes only.
+#
+# Last updated: 2005-12-06 17:52:39 -0600
+
+use strict;
+use warnings;
+
+use URI::Escape;
+use LWP::UserAgent;
+
+
+unless ( @ARGV ) {
+    exit( 1 ) ;
+}
+
+my $url = 'http://www.google.com/search?num=1&q=' .
+    uri_escape( join ' ' => @ARGV );
+
+my $ua = LWP::UserAgent->new( agent => 'Mozilla/5.0' );
+my $response = $ua->get( $url );
+
+$response->is_success or
+    die "$url: ", $response->status_line;
+
+my $content = $response->content;
+
+#    print "$content\n";
+# my ( $result ) = $content =~ m|<td nowrap><font size=\+1><b>(.*?)</b></td>|;
+# <td nowrap dir=ltr><h2 class=r><font size=+1><b>200 + 200 = 400</b></h2></td>
+my ( $result ) = $content =~ m|<td nowrap dir=ltr><h2 class=r><font size=\+1><b>(.*?)</b></h2></td>|;
+
+if ( $result ) {
+
+    $result =~ s/<sup>/^/g;
+    $result =~ s/&times;/x/g;
+    $result =~ s/<.+?>//g;
+
+    print "$result\n";
+
+} 

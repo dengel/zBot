@@ -1,0 +1,18 @@
+#!/usr/bin/perl
+#use strict;
+use Net::Google;
+use constant LOCAL_GOOGLE_KEY => "cqXgjBNQFHLOW8VM0Mp3EqHW6UqfCMY3";
+
+my $google = Net::Google->new(key=>LOCAL_GOOGLE_KEY);
+my $search = $google->search();
+
+# Search interface
+
+$search->query(@ARGV);
+$search->lr(qw(en es));
+$search->ie("utf8");
+$search->oe("utf8");
+$search->starts_at(1);
+$search->max_results(1);
+
+map { print $_->URL()."\n"; } @{$search->results()};

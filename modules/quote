@@ -1,0 +1,46 @@
+#!/usr/bin/perl -w
+use strict;
+use Finance::Quote;
+use Data::Dumper;
+
+my $symbol;
+my $price;
+my $net;
+my $name;
+my $currency;
+my $success=1;
+
+die "Usage: $0 symbol\n" unless (defined $ARGV[0]);
+
+my $q = Finance::Quote->new;
+
+my %quotes = $q->fetch("yahoo",$ARGV[0]);
+
+# print Dumper(\%quotes);
+
+$symbol= uc $ARGV[0];
+
+while ( my($key, $value) = each(%quotes) ) {
+    $_=$key;
+    if ( /price/ ) {
+        $price=$value ? $value : "?.??";
+    }
+    if ( /net/ ) {
+        $net=$value ? $value : "?.??";
+    }
+    if ( /name/ ) {
+        $name=$value ? $value : "??";
+    }
+    if ( /currency/ ) {
+        $currency=$value ? $value : " ";
+    }
+    if ( /success/ ) {
+        $success=$value ? $value : "0";
+    }
+}
+
+if ($success) {
+print "$name ($symbol): $currency\$$price ($net)\n";
+} else {
+    print "Can't stat symbol $symbol\n";
+}

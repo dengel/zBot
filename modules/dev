@@ -1,0 +1,33 @@
+#!/bin/bash
+
+URL="$1"
+if [ "$URL" == "last" ]; then
+
+	if [ "$2" != "" ]; then
+		CLAUSE="AND nick=\"$2\""
+	fi
+	ZBOT_CHAN="$(echo $ZBOT_CHAN | sed 's/#//')"
+	DBI="$(cd ../bin && perl dbsh)"
+	URL="$(mysql $DBI -Bse "select url from urls where channel=\"$ZBOT_CHAN\" $CLAUSE order by u_id desc limit 1")"
+	EXTRA=" -> $URL"
+fi
+
+if [ "$URL" == "" ]; then
+	exit 1
+fi
+
+ALGO="$(echo $1|grep ^http)"
+
+if [ "$URL" == "$ALGO" ]; then
+ 
+OUT="$(lynx --source "http://dev.cl/funciona.dev?bml=api&url=${URL}")"
+
+URL="$(echo $OUT )"
+echo "Dev url: $URL$EXTRA"
+exit 1
+
+fi
+
+
+
+exit 1

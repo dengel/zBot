@@ -1,0 +1,13 @@
+#!/bin/bash
+trap "rm -rf /tmp/drae.$$" 1 2 3 9 15
+lynx -dump --nolist \
+"http://buscon.rae.es/draeI/SrvltGUIBusUsual?TIPO_HTML=2&LEMA=$1" \
+> /tmp/drae.$$
+
+cat /tmp/drae.$$ 2> /dev/null\
+ | tail -n $((`wc -l /tmp/drae.$$ 2> /dev/null | \
+awk '{ print $1 ;}'`-2)) | grep 1.|head -1
+if [ -f /tmp/drae.$$ ]
+then rm /tmp/drae.$$
+fi
+

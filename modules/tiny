@@ -1,0 +1,14 @@
+#!/bin/bash
+
+URL="$1"
+if [ "$URL" == "" ]; then
+	exit 1
+fi
+
+OUT="$(lynx --source "http://tinyurl.com/create.php?url=${URL}" | grep blockquote | tail -1)"
+
+URL="$(echo $OUT | sed 's/<blockquote>//' | sed 's/<\/blockquote>//')"
+
+echo "Tiny url: $URL"
+
+exit 1

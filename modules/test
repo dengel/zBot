@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "$ZBOT_CHAN | $ZBOT_NICK | $ZBOT_PERM"

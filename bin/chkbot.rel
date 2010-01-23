@@ -1,0 +1,37 @@
+#!/bin/sh
+
+###############################################################
+#CONFIGURACION
+###############################################################
+
+# Directorio Base
+BPATH=/tmp/ZbotClone/bin
+
+# Archivo que contiene el pid
+PIDFILE=../log/zbot.pid
+
+# Nombre del ejecutable
+PROG=zbot
+
+# Parametros del ejecutable
+PROGARGS=""
+
+###############################################################
+# DEED
+###############################################################
+
+PROGPID=
+
+cd $BPATH
+
+if [ -f $PIDFILE ]
+then
+   PROGPID=`cat $PIDFILE`
+   if [ `ps x| grep $PROG | grep $PROGPID | grep -v -c grep` -eq 1 ]
+   then
+      exit   
+   fi
+   rm -f $PIDFILE
+fi
+
+./$PROG $PROGARGS
