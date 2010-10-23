@@ -673,7 +673,7 @@ sub check {
                         return 0;
                     };
 
-                    /^\!learn/ && do {
+                    /^\!define/ && do {
                         $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LEARN);
                         return if (! $remote_level);
 
@@ -688,7 +688,7 @@ sub check {
                         }
                     };
 
-                    /^\!flearn/ && do {
+                    /^\!learn/ && do {
                         $remote_level=ck_perm($remote_nick, $remote_host, $botchan, $PERM_LEARN);
                         return if (! $remote_level);
 
